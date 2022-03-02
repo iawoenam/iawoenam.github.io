@@ -1,0 +1,536 @@
+---
+title: "AMW_4A_Submission"
+author: "Awoenam Mauna-Woanya"
+date: "3/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE, eval = TRUE, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(sf)
+library(leaflet)
+library(mapview)
+library(censusapi)
+library(plotly)
+library(mapboxapi)
+library(tigris)
+library(raster)
+
+setwd("C:/Users/mouse/OneDrive - Stanford/MS2/WinterQ/218Y/Hazards/")
+path_data = "G:/My Drive/218Y/Assignments/4A/data/"
+Sys.setenv(CENSUS_KEY="30f44d95cb0d8c10acfc57d830d39957dbfe8a39")
+```
+
+
+The report below applies the Stanford Urban Risk Framework (SURF) to sea-level rise in Foster City, CA, as shown in the map below. 
+
+```{r FC basemap, eval=TRUE, echo = FALSE}
+fostercity_boundary <- readRDS("fostercity_boundary.rds")
+
+leaflet() %>% 
+  addMapboxTiles(
+    style_id = "satellite-streets-v11",
+    username = "mapbox",
+    options = tileOptions(opacity = 0.5)
+  ) %>% 
+  addPolygons(
+    data = fostercity_boundary
+  )
+
+```
+
+Specifically, it analyzes sea-level rise (SLR) as a hazard, building and vehicle exposure to SLR, and its damages between 2020 and 2050 for the census block groups shown below. 
+
+```{r, eval = TRUE, echo = FALSE}
+# Foster City chosen CBGs
+fc_cbg <- block_groups("CA", "San Mateo", cb = F, progress_bar = F, year = 2019) %>% 
+  filter(GEOID %in% c("06081608001", "060816083001", "060816080012", "060816080011")) %>% 
+  st_transform(4326)
+
+# Foster City Buildings
+fc_bldg <- readRDS(paste0(path_data,"fc_bldg.rds")) %>% 
+  .[fc_cbg,]
+
+# Foster City Blocks
+fc_blocks <- readRDS("fc_blocks.rds") %>% 
+  st_transform(4326) %>% 
+  .[fc_bldg, ]
+
+# Foster City Population 
+fc_blocks_pop <-  
+  fc_blocks %>% 
+  dplyr::select(GEOID20, POP20) %>% 
+  st_drop_geometry()
+
+# visualize block groups
+leaflet() %>% 
+  addMapboxTiles(
+    style_id = "satellite-streets-v11",
+    username = "mapbox",
+    options = tileOptions(opacity = 0.5)
+  ) %>% 
+  addPolygons(
+    data = fc_cbg
+  )
+```
+
+
+The Bay Area is susceptible to coastal flooding, and Foster City, a city with homes built adjacent to the Bay, is at a high-risk for sea-level rise. The potential for this hazard can have major economic impacts for its residents and adjacent neighborhoods. 
+
+
+
+# Flooding Exposure
+
+Using Sea Level Rise predictions from Our Coast Our Future, we can visualize different various coastal flooding scenarios. These scenarios include sea-level rise of 0, 25, and 50 cm and storm surge return periods, which indicate the chance of exceeding that likelihood, as annual, 20-years, and 100-years. Below is the worst case scenario where Foster City experiences 50 cm of sea level rise from a 100-year flood. 
+```{r, eval = TRUE, echo = FALSE}
+
+FC_bldg_flooded_max <-  readRDS(paste0(path_data,"FC_bldg_flooded_max.rds"))
+
+flood_max <- raster("FC_flood/SLR050_RP100_FC_flood.tif")
+
+flood_pal <- colorNumeric(
+  palette = "Blues",
+  domain = values(flood_max),
+  na.color = "transparent"
+)
+
+leaflet() %>% 
+  addMapboxTiles(
+    style_id = "satellite-streets-v11",
+    username = "mapbox",
+    options = tileOptions(opacity = 0.5)
+  ) %>% 
+  addRasterImage(
+    flood_max,
+    colors = flood_pal,
+    opacity = 0.75, 
+    maxBytes = Inf
+  ) %>% 
+  addPolygons(
+    data = FC_bldg_flooded_max,
+    fill = F,
+    color = "red",
+    weight = 0.5
+  ) %>% 
+  addLegend(
+    pal = flood_pal,
+    values = values(flood_max),
+    title = "Flood depth, cm"
+  )
+```
+
+In blue, we see the flooded areas and in red are the buildings impacted by flooding and subsequent sea-level rise. Foster City is mostly residential so we can assume that all these homes will be flooded given the worst-scenario. We can include exposed vehicles to improve our loss quantification. Using census data, and assuming an even distribution of vehicles across our population, and that vehicles are on the ground level, we can also determine the depth of vehicles in our CBGs. Households are divided into homes with no vehicles or at least one vehicle.
+
+# Vulnerability
+
+Each hazard scenario impacts our exposed assets (buildings and vehicles) differently. You can imagine that the greater the flood depth, the larger percent of exposed assets will be damaged. We call this relationship our asset's vulnerability. Using depth-damage curves for [buildings](https://planning.erdc.dren.mil/toolbox/library/EGMs/egm01-03.pdf) and [vehicles](https://planning.erdc.dren.mil/toolbox/library/EGMs/egm09-04.pdf) from US Army Corps of Engineers, we can visualize the kind of impact varying sea-level rise scenarios can have in the two figures below. First, we have our building damage for varying flood depths: 
+
+```{r, eval = TRUE, echo = FALSE}
+fc_bldg_perc_damage <- readRDS(paste0(path_data, "fc_bldg_perc_damage.rds"))
+
+fc_bldg_perc_damage_plot <- 
+  expand.grid(
+    osm_id = unique(fc_bldg_perc_damage$osm_id),
+    SLR = unique(fc_bldg_perc_damage$SLR),
+    RP = unique(fc_bldg_perc_damage$RP)
+  ) %>% 
+  left_join(fc_bldg_perc_damage) %>% 
+  mutate(
+    avg_depth = ifelse(
+      is.na(avg_depth),
+      -2,
+      avg_depth
+    ),
+    perc_damage = ifelse(
+      is.na(perc_damage),
+      0,
+      perc_damage
+    )
+  )
+
+fc_plot <- 
+  plot_ly() %>% 
+  add_trace(
+    data = 
+      fc_bldg_perc_damage_plot %>% 
+      filter(RP == "100") %>% 
+      mutate(SLR = SLR %>% as.numeric()),
+    x = ~avg_depth,
+    y = ~perc_damage,
+    frame = ~SLR,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      color = 'rgba(17, 157, 255, .01)',
+      size = 15
+    ), 
+    showlegend = F
+  ) %>% 
+  layout(
+    xaxis = list(
+      title = "Average Flood Depth",
+      zeroline = FALSE
+    ),
+    yaxis = list(
+      title = "Percent Damage"
+    ),
+    title = "Foster City building damage during <br> 100-year storm, by base sea level rise"
+  ) %>% 
+config(displayModeBar = F)
+  
+fc_plot
+```
+
+Then we have our vehicle damage for varying hazard scenarios. First, by sea-level rise, then second by return period. 
+
+```{r, eval = TRUE, echo = FALSE}
+emfac <- read.csv("EMFAC2021-ER-202xClass-SanMateo2020-2030-2040-2050-Annual-20220228180541.csv", skip = 8)
+
+
+vehicle_annual_increase <- 
+  emfac %>% 
+  group_by(Calendar.Year) %>% 
+  
+  # assumes population = vehicle count
+  summarise(vehicle_count = sum(Population)) %>% 
+  rename(year = Calendar.Year) %>% 
+  mutate(
+    perc_incr = vehicle_count/vehicle_count[1]
+  )
+
+vulnerability <-  data.frame(
+  depth = c(.5,1:10),
+  perc_damage = 
+    c(
+      .076,
+      .28,
+      .462,
+      .622,
+      .76,
+      .876,
+      .97,
+      1,
+      1,
+      1,
+      1
+    )
+)
+
+fc_veh_perc_damage <- readRDS("fc_veh_perc_damage.rds")
+
+fc_veh_perc_damage_plot <- 
+  expand.grid(
+    osm_id = unique(fc_veh_perc_damage$osm_id),
+    SLR = unique(fc_veh_perc_damage$SLR),
+    RP = unique(fc_veh_perc_damage$RP)
+  ) %>% 
+  left_join(fc_veh_perc_damage)
+
+# plot on plotly
+fc_veh_plot_SLR <- 
+  plot_ly() %>% 
+  add_trace(
+    data = 
+      fc_veh_perc_damage_plot %>% 
+      filter(RP == "100") %>% 
+      mutate(
+        SLR = SLR %>% as.numeric()
+      ),
+    x = ~avg_depth,
+    y = ~perc_damage,
+    frame = ~SLR,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      color = 'rgba(17, 157, 255, .01)',
+      size = 15
+    ),
+    showLegend = F
+  ) %>%
+  add_trace(
+    data = vulnerability,
+    x = ~depth,
+    y = ~perc_damage,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      color = 'rgb(0,0,0)'
+    ),
+    showlegend = F
+  ) %>% 
+  layout(
+    xaxis = list(
+      title = "Average Flood Depth",
+      zeroline = FALSE
+      ),
+    yaxis = list(
+      title = "Vehicle Percent Damage"
+    ),
+    title = "Foster City Vehicle Damage <br> 100-year storm, by base sea level rise") %>% 
+  config(displayModeBar = F)
+
+fc_veh_plot_SLR
+
+fc_veh_plot_RP <- 
+  plot_ly() %>% 
+  add_trace(
+    data = 
+      fc_veh_perc_damage_plot %>% 
+        filter(SLR == "050") %>% 
+        mutate(RP = RP %>% as.numeric()),
+    x = ~avg_depth,
+    y = ~perc_damage,
+    frame = ~RP,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      color = 'rgba(17, 157, 255, 0.01)',
+      size = 15
+    ),
+    showlegend = F
+  ) %>% 
+  add_trace(
+    data = vulnerability,
+    x = ~depth,
+    y = ~perc_damage,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      color = 'rgb(0,0,0)'
+    ),
+    showlegend = F
+  ) %>% 
+  layout(
+    xaxis = list(
+      title = "Storm Return Period (Severity)",
+      zeroline = FALSE
+    ),
+    yaxis = list(
+      title = "Percent Damage"
+    ),
+    title = "Foster City vehicle damage during<br>50 cm sea level rise, by storm return period"
+  ) %>% 
+  config(displayModeBar = F)
+
+fc_veh_plot_RP
+
+```
+
+We can see in the plots above that while there's a non-linear relationship between flood depth and percent damage, generally, the greater the flood depth or worse the storm, the greater the percent damage.
+
+# Risk Estimation
+
+Finally, we can model risk as damages measured quantified by annualized average losses for vehicles per building in our desired census block groups. These damages can be projected over the next 30 years by first using RCP4.5 decade sea-level rise projections, and second assuming that each car costs the average price of a new car today, in 2022. These damages were determine with the following equation:
+
+$$ \frac{\text{damage (in dollars)}}{\text{building}} = \frac{\text{damage (in dollars)}}{\text{vehicle}} \times \frac{\text{vehicles}}{\text{building}} \times \% \text{vehicle increase}   $$
+
+Using the equation above, we can visualize annualize every decade between 2020 and 2050 in the figure below:
+```{r, eval = TRUE, echo = FALSE}
+# data frames
+fc_block_veh_per_bldg <- readRDS("fc_block_veh_per_bldg.rds")
+fc_veh_per_bldg <- readRDS("fc_veh_per_bldg.rds")
+fc_bldg_exposure <- readRDS(paste0(path_data,"fc_bldg_exposure.rds"))
+fc_veh_per_bldg <- readRDS("fc_veh_per_bldg.rds")
+fc_veh_exposure <- readRDS("fc_veh_exposure.rds")
+fc_veh_perc_damage <- readRDS("fc_veh_perc_damage.rds")
+
+# worst case flooding scenario
+projection <- "+proj=utm +zone=10 +ellps=GRS80 +datum=NAD83 +units=ft +no_defs"
+
+# RCP4.5
+rcp45 <- readRDS("rcp45.rds")
+
+# covert % damages to dollar damages
+fc_veh_damage <- fc_veh_perc_damage %>% 
+  mutate(
+    damage = perc_damage * 47000 # KBB
+  ) %>% 
+  dplyr::select(osm_id, SLR, RP, damage)
+
+# determine average annualized loss for vehicle damages in $
+fc_veh_aal_by_slr <- 
+  fc_veh_damage %>% 
+  pivot_wider(
+    names_from = RP,
+    values_from = damage
+  ) %>% 
+  replace(is.na(.),0) %>% 
+  mutate(
+    damage = 
+      .95*(`001`+`020`)/2 + 
+      .04*(`020`+`100`)/2 +
+      .01*(`100`)
+  ) %>% 
+  dplyr::select(osm_id, SLR, damage)
+
+# AAL bw 2020 and 2050
+fc_veh_aal_by_year <- 
+  fc_veh_aal_by_slr %>% 
+  left_join(
+    rcp45 %>% 
+      mutate(
+        SLR = str_pad(SLR, 3, "left", "0")
+    )%>% 
+      dplyr::select(
+        SLR,
+        `2020`,
+        `2030`,
+        `2040`,
+        `2050`,
+      )
+    )%>% 
+  pivot_longer(
+    `2020`:`2050`,
+    names_to = "year",
+    values_to = "occurrence"
+  ) %>% 
+  pivot_longer(
+    c(damage, occurrence),
+    names_to = "key",
+    values_to = "value"
+  ) %>% 
+  pivot_wider(
+    names_from = c("key","SLR"),
+    values_from = value 
+  ) %>% 
+  replace(is.na(.),0) %>% 
+  mutate(
+    damage = 
+      occurrence_000 * (damage_000 + damage_025)/2 + 
+      occurrence_025 * (damage_025 + damage_050)/2 + 
+      occurrence_050 * (damage_050)
+  ) %>% 
+  dplyr::select(osm_id, year, damage)
+
+# account vehicle usage increase each year
+fc_veh_aal_by_year$year <- fc_veh_aal_by_year$year %>% 
+  as.numeric()
+
+fc_veh_aal_by_year <- fc_veh_aal_by_year %>% 
+  left_join(fc_veh_per_bldg) %>% 
+  left_join(vehicle_annual_increase %>% 
+              dplyr::select(year, perc_incr)) %>% 
+  mutate(
+    `damage_per_bldg ($)` = damage * veh_per_bldg * perc_incr
+  )
+
+
+fc_veh_aal_by_year_map <- readRDS("fc_bldg_aal_by_year_map.rds") %>% 
+  filter(osm_id %in% fc_bldg$osm_id) %>% 
+  st_as_sf()
+
+# palette
+aal_pal <- colorNumeric(
+  palette = "Reds",
+  domain = c(0, fc_veh_aal_by_year_map$`2050`)
+)
+
+# leaflet
+fc_veh_aal_by_year_map %>% 
+  leaflet() %>% 
+  
+  # Base Map
+  addMapboxTiles(
+    style_id = "light-v9",
+    username = "mapbox"
+  ) %>% 
+  
+  # 2020 AALs
+  addPolygons(
+    fillColor = ~aal_pal(`2020`),
+    color = "gray",
+    fillOpacity = 1,
+    opacity = 1,
+    weight = 0.25,
+    highlightOptions = highlightOptions(
+      color = "white",
+      weight = 2
+    ),
+    label = ~paste0("$",prettyNum(signif(`2020`,2),",")," average annualized loss in 2020"),
+    group = "2020"
+  ) %>% 
+  
+  # 2030 AALs
+  addPolygons(
+    fillColor = ~aal_pal(`2030`),
+    color = "gray",
+    fillOpacity = 1,
+    opacity = 1,
+    weight = 0.25,
+    highlightOptions = highlightOptions(
+      color = "white",
+      weight = 2
+    ),
+    label = ~paste0("$",prettyNum(signif(`2030`,2),",")," average annualized loss in 2030"),
+    group = "2030"
+  ) %>% 
+  
+  # 2040 AALs
+  addPolygons(
+    fillColor = ~aal_pal(`2040`),
+    color = "gray",
+    fillOpacity = 1,
+    opacity = 1,
+    weight = 0.25,
+    highlightOptions = highlightOptions(
+      color = "white",
+      weight = 2
+    ),
+    label = ~paste0("$",prettyNum(signif(`2040`,2),",")," average annualized loss in 2040"),
+    group = "2040"
+  ) %>% 
+  
+  # 2050 AALs
+  addPolygons(
+    fillColor = ~aal_pal(`2050`),
+    color = "gray",
+    fillOpacity = 1,
+    opacity = 1,
+    weight = 0.25,
+    highlightOptions = highlightOptions(
+      color = "white",
+      weight = 2
+    ),
+    label = ~paste0("$",prettyNum(signif(`2050`,2),",")," average annualized loss in 2050"),
+    group = "2050"
+  ) %>% 
+  
+  # 2050-2020 AAL change
+  addPolygons(
+    fillColor = ~aal_pal(change),
+    color = "gray",
+    fillOpacity = 1,
+    opacity = 1,
+    weight = 0.25,
+    highlightOptions = highlightOptions(
+      color = "white",
+      weight = 2
+    ),
+    label = ~paste0("$",prettyNum(signif(change,2),",")," change in average annualized loss from 2020 to 2050"),
+    group = "Change"
+  ) %>% 
+  
+  # Legend
+  addLegend(
+    pal = aal_pal,
+    values = ~`2050`,
+    title = "Vehicle AAL"
+  ) %>% 
+  
+  # Adding and Toggling Layers
+  addLayersControl(
+    baseGroups = c("2020","2030","2040", "2050", "Change"), 
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>% 
+  showGroup("2050")
+
+# fc_veh_aal_by_year_map
+
+```
+
+Overall, sea-level rise will have financial impact ranging from \$2,000 in 2020 to about \$60,000 in 2050 assuming that vehicle ownership increases according to EMFAC rates. The area with the most damage (reaching about $1,000,000) is actually a commercial center with a grocery store so it might be classified in the OSM database incorrectly since we filtered for residential/houses/apartments. If we apply our damage function to this area however, we find exorbitant losses especially by 2050. 
+
+Foster City Government and its residents must think about the potential sea-level rise risk and make efforts to adapt or mitigate those risks. Since the Bay Area's coast lines are at risk, a plan that address them all collectively might improve overall mitigation. 
+
