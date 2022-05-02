@@ -1,0 +1,426 @@
+---
+title: "amw_highway_notes"
+author: "Awoenam Mauna-Woanya"
+date: "5/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(readxl)
+library(tigris)
+library(sf)
+library(leaflet)
+library(jsonlite)
+library(esri2sf)
+library(mapview)
+library(mapboxapi)
+
+Sys.setenv(CENSUS_KEY="30f44d95cb0d8c10acfc57d830d39957dbfe8a39")
+pa_api <- "6C39C4C7-9A53-11EC-B9BF-42010A800003" 
+path <- 'G:/Shared drives/S22 218Z/Air Quality (OCOB)/Data/'
+participants <- read_csv(paste0(path,'participants.csv'))
+
+```
+
+# Highway Geometry
+
+Grab highway shape geometry from https://opendata.mtc.ca.gov/datasets/san-francisco-bay-region-roadways/explore?location=37.490972%2C-122.217834%2C13.66 
+
+```{r, include=FALSE}
+bay_highways_shp <- readRDS(paste0(path, "bay_highways_shp.rds"))
+```
+
+```{r}
+# map it
+mapview(bay_highways_shp)
+```
+
+
+
+# Grab Indoor/Outdoor Sensors
+
+Grab all our sensors, both in our study and across the Bay (filtered to San Mateo County). Highways are merged via union for upcoming analysis.
+
+```{r, include=FALSE}
+# grab all bay sensors
+bay_sensors <- readRDS(paste0(path,"Sensors/bay_sensors_2022-04-17.rds"))
+
+# grab our 27 sensors
+all_27_sensors <- readRDS(paste0(path, "Sensors/all_27_sensors.rds"))
+
+# SMC boundary
+smc_boundary <- counties("CA", cb = T) %>% 
+  filter(NAME == "San Mateo") %>% 
+  st_transform(4326)
+
+# Pair all bay highways to SMC
+smc_highways <- bay_highways_shp %>% 
+  st_transform(4326) %>% 
+  .[smc_boundary, ] %>% 
+  st_union()
+
+# SMC only sensors instead of all bay sensors
+smc_sensors <- bay_sensors %>% 
+  st_transform(4326) %>% 
+  .[smc_boundary,]
+
+
+```
+
+
+```{r}
+
+mapview(all_27_sensors) + mapview(smc_highways)
+
+```
+
+
+# Indoor/Outdoor Analysis within 1/2 mile of highways
+
+Add a .5 mile buffer to highways to qualitatively compare air quality for sensors near and far from highways. .5 miles chosen arbitrarily.
+
+```{r, include=FALSE}
+# create a 1/2 mile buffer of the SMC highways
+highway_buffer <- smc_highways %>% 
+  st_transform(26910) %>% 
+  st_buffer(800) %>% 
+  st_transform(4326)
+  
+smc_sensors_near_highway <- smc_sensors %>% 
+  .[highway_buffer,]
+
+
+```
+
+```{r}
+mapview(smc_sensors_near_highway) + mapview(smc_highways)
+```
+
+
+# add tags for upcoming visualizations (near highway/sensor type)
+
+```{r, include=FALSE}
+all_27_near_highway <- 
+  all_27_sensors %>% 
+  .[highway_buffer,]
+
+all_27_sensors <- 
+  all_27_sensors %>% 
+  mutate(
+    near_highway = case_when(
+      sensor_index %in% all_27_near_highway$sensor_index ~ "YES",
+      TRUE ~ "NO"
+    ),
+    type = "participant"
+  )
+
+smc_sensors <- 
+  smc_sensors %>% 
+  mutate(
+    near_highway = case_when(
+      sensor_index %in% smc_sensors_near_highway$sensor_index ~ "YES",
+      TRUE ~ "NO"
+    ),
+    type = "original"
+  ) %>% 
+  rbind(
+    all_27_sensors
+  )
+```
+
+# Visualize sensors near highway map
+
+```{r}
+leaflet() %>% 
+  addMapboxTiles(
+    style_id = "light-v9",
+    username = "mapbox"
+  ) %>% 
+  addPolylines(
+    data = smc_highways,
+    fillColor = "black", 
+    fillOpacity = 1,
+    color = "black", 
+    weight = 2
+  ) %>% 
+  addPolygons(
+    data = highway_buffer,
+    fillColor = "yellow",
+    fillOpacity = .2,
+    color = "yellow",
+    weight = .2
+  ) %>% 
+  addCircleMarkers(
+    data = smc_sensors %>% filter(near_highway == "YES", type == "original"),
+    fillColor = "green",
+    fillOpacity = 1,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .8,
+    group = "Original Sensor Near from Highway"
+  ) %>% 
+  addCircleMarkers(
+    data = smc_sensors %>% filter(near_highway == "NO", type == "original"),
+    fillColor = "red",
+    fillOpacity = .5,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .2, 
+    group = "Original Sensor Away from Highway"
+  ) %>% 
+  addCircleMarkers(
+    data = all_27_sensors %>% filter(near_highway == "YES", type == "participant"),
+    fillColor = "purple",
+    fillOpacity = 1,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .8,
+    group = "Participant Sensor Near Highway"
+  ) %>%
+  addCircleMarkers(
+    data = all_27_sensors %>% filter(near_highway == "NO", type == "participant"),
+    fillColor = "purple",
+    fillOpacity = 1,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .2,
+    group = "Participant Sensor Away Highway"
+  ) %>% 
+  addLayersControl(
+    overlayGroups = c("Original Sensor Away from Highway",
+                   "Original Sensor Near from Highway",
+                   "Participant Sensor Near Highway",
+                   "Participant Sensor Away Highway"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+
+# mapshot(m, file = paste0(path, "highway_analysis.png"))
+
+```
+
+
+# Binary AQI analysis
+
+```{r, include=FALSE}
+# call Purple Air API
+json <- fromJSON(paste0(
+    "https://api.purpleair.com/v1/sensors?api_key=",
+    pa_api,
+    "&fields=name,location_type,latitude,longitude,pm2.5_1week,temperature,humidity,primary_id_a,primary_key_a,secondary_id_a,secondary_key_a,primary_id_b,primary_key_b,secondary_id_b,secondary_key_b"
+  ))
+
+# pull all recent data
+all_sensors <- json %>% 
+  .$data %>% 
+  as.data.frame() %>% 
+  set_names(json$fields) %>% 
+  filter(
+    !is.na(longitude),
+    !is.na(latitude)
+  ) %>% 
+  st_as_sf(coords = c("longitude","latitude"), crs = 4326) %>% 
+  mutate(location_type = ifelse(
+    location_type == 0,
+    "outside",
+    "inside"
+  ))
+
+# subset to SMC
+smc_pa_sensors <- all_sensors %>% 
+  .[smc_boundary,]
+
+smc_sensors_clean <- smc_pa_sensors %>% 
+  filter(
+    !is.na(pm2.5_1week),
+    !is.na(humidity)
+  ) %>% 
+  mutate(
+    PM25 = 0.524*as.numeric(pm2.5_1week) - 0.0852*as.numeric(humidity) + 5.72,
+    AQI = case_when(
+      PM25 <= 12 ~ 
+        paste(round(50/12*PM25), "Good"),
+      PM25 <= 35.4 ~ 
+        paste(round((100-51)/(35.4-12)*(PM25 - 12) + 51), "Moderate"),
+      PM25 <= 55.4 ~
+        paste(round((150-101)/(55.4-35.4)*(PM25 - 35.4) + 101), "Moderately Unhealthy"),
+      PM25 <= 150.4 ~
+        paste(round((200-151)/(150.4-55.4)*(PM25 - 55.4) + 151), "Unhealthy"),
+      PM25 <= 250.4 ~
+        paste(round((300-201)/(250.4-150.4)*(PM25 - 150.4) + 201), "Very Unhealthy"),
+      TRUE ~ 
+        paste(round((500-301)/(500.4-250.5)*(PM25 - 250.5) + 301), "Hazardous")
+    )
+  ) %>% 
+  separate(
+    AQI,
+    into = c("AQI","AQI_Cat"),
+    sep = " ",
+    extra = "merge"
+  ) %>% 
+  mutate(
+    AQI = as.numeric(AQI),
+    AQI_Cat = AQI_Cat %>% factor(levels = c("Good", "Moderate","Moderately Unhealthy","Unhealthy","Very Unhealthy","Hazardous"))
+  )
+
+# add near highway tag
+smc_sensors_complete  <- 
+  smc_sensors_clean %>% 
+    mutate(
+      near_highway = case_when(
+        sensor_index %in% smc_sensors_near_highway$sensor_index ~ "YES",
+        TRUE ~ "NO"
+      )
+    )
+# saveRDS(smc_sensors_complete, paste0(path,"smc_sensors_AQI.rds"))
+
+
+```
+
+```{r, include=FALSE}
+smc_sensors_AQI <- readRDS(paste0(path,"smc_sensors_AQI.rds"))
+```
+
+```{r, include=FALSE}
+SMC_summary <- smc_sensors_AQI %>% 
+  group_by(near_highway) %>% 
+  summarize(
+    average_AQI = mean(AQI)
+  )
+
+
+```
+
+The plot below shows little difference between AQi in sensors near the highway or further away.
+```{r}
+AQI_near_highway_plot <- 
+  ggplot(data = SMC_summary,
+         aes(x = near_highway,
+             y = average_AQI)) +
+  geom_col() + 
+  scale_fill_brewer(palette = "YlOrRd")
+
+AQI_near_highway_plot
+```
+
+# Improve analysis to measure AQI continuously
+Use st_nearest to determine the distance from each sensor to the nearest highway. Below is a map that shows one sensor connected to its nearest highway.
+
+```{r}
+
+nearest_distance <- 
+  st_nearest_points(smc_sensors_AQI[1,],smc_highways) %>% 
+  st_sf()
+
+# visualize
+leaflet() %>% 
+  addMapboxTiles(
+    style_id = "light-v9",
+    username = "mapbox"
+  ) %>% 
+  addPolylines(
+    data = smc_highways,
+    fillColor = "black", 
+    fillOpacity = 1,
+    color = "black", 
+    weight = 2
+  ) %>% 
+  addPolygons(
+    data = highway_buffer,
+    fillColor = "yellow",
+    fillOpacity = .2,
+    color = "yellow",
+    weight = .2
+  ) %>% 
+  addCircleMarkers(
+    data = smc_sensors_AQI %>% filter(near_highway == "YES"),
+    fillColor = "green",
+    fillOpacity = 1,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .8,
+    group = "Original Sensor Near from Highway"
+  ) %>% 
+  addCircleMarkers(
+    data = smc_sensors_AQI %>% filter(near_highway == "NO"),
+    fillColor = "red",
+    fillOpacity = .5,
+    color = "black",
+    opacity = 1,
+    radius = 6,
+    weight = .2, 
+    group = "Original Sensor Away from Highway"
+  ) %>% 
+  addPolylines(
+    data = nearest_distance %>% 
+      st_transform(4326),
+    color = "blue",
+    weight = .5
+  ) %>% 
+  addLayersControl(
+    overlayGroups = c("Original Sensor Away from Highway",
+                   "Original Sensor Near from Highway"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
+
+
+# distance_to_hwy <- 
+#   st_nearest_points(smc_sensors_AQI[3,ncol(smc_sensors_AQI)],smc_highways) %>% 
+#   st_length() %>% 
+#   as.numeric()
+
+
+```
+
+```{r, include=FALSE}
+# use map_dbl to get the distance from each point to the nearest highway list
+smc_distance_to_hwy <- 
+  1:nrow(smc_sensors_AQI) %>% 
+  map_dbl(function(x){
+    
+    smc_sensors_AQI[x, ncol(smc_sensors_AQI)] <- 
+      st_nearest_points(smc_sensors_AQI[x, ],smc_highways) %>% 
+      st_length()
+    
+  })
+
+smc_distance_to_hwy <- smc_distance_to_hwy %>% 
+  floor()
+
+smc_sensors_AQI$`d_to_hwy (m)` <- smc_distance_to_hwy
+
+
+
+```
+
+# Regression analysis to see relationship between AQI and distance
+
+First, plotting AQI relative to distance from highway, then a linear regression summary showing that according to our model, distance from highway is a poor predictor of AQI.
+```{r}
+hwy_AQI_distance <- ggplot(smc_sensors_AQI,
+                           aes(`d_to_hwy (m)`,AQI)
+                           ) +
+  geom_point() +
+  geom_smooth()
+
+hwy_AQI_distance
+
+# linear regression formula
+fit <- lm(AQI ~ `d_to_hwy (m)`, data = smc_sensors_AQI)
+summary(fit)
+
+```
+
+For every meter increase in distance to highway, our model predicts a -4.175e-5 decrease in AQI. 
+
+
