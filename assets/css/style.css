@@ -811,6 +811,15 @@ img.rounded-corners {
 /*--------------------------------------------------------------
 # 
 --------------------------------------------------------------*/
+.horizontal-scroll {
+  overflow-x: scroll;
+}
+
+.row {
+    display:inline-flex;
+    flex-wrap:nowrap
+}
+
 .content .icon-box {
   text-align: center;
   padding: 70px 20px 80px 20px;
@@ -908,6 +917,21 @@ img.rounded-corners {
 
 .content .iconbox-pink:hover .icon path {
   fill: #e80368;
+}
+
+.content .iconbox-foe i {
+  color: #47aeff;
+    
+}
+
+.content .iconbox-foe:hover .icon i {
+  color: #fff;
+    background: url('../img/foe%20logo.ico'); 
+}
+
+.content .iconbox-foe:hover .icon path {
+/*  fill: #47aeff;*/
+    background: url('../img/foe%20logo.ico'); 
 }
 
 .content .iconbox-yellow i {
