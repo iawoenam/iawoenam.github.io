@@ -335,7 +335,7 @@ h6 {
   color: #45505b;
   line-height: 1;
   margin-right: 20px;
-  transition: 0.3s;
+  transition: 1s;
 }
 
 #hero .social-links a:hover {
@@ -1216,7 +1216,7 @@ img.rounded-corners {
 }
 
 #footer .social-links a {
-  font-size: 18px;
+  font-size: 20px;
   display: inline-block;
   background: #775DA5;
   color: #fff;
