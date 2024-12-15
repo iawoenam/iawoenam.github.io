@@ -448,6 +448,10 @@ img.rounded-corners {
   border-radius: 30px;
 }
 
+.bordered-image {
+    border: 1px solid #000; /* Adjust color and width as needed */
+}
+
 /*--------------------------------------------------------------
 # Facts
 --------------------------------------------------------------*/
