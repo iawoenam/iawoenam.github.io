@@ -59,6 +59,41 @@
   }
   window.addEventListener('load', navbarlinksActive)
   onscroll(document, navbarlinksActive)
+  
+   document.addEventListener('DOMContentLoaded', function() {
+    // Array of image paths for the About section
+    const aboutImages = [
+        'assets/img/24_amw_landing_prof.jpg',   // Your existing image
+        'assets/img/25_amw_sunrise.jpg',    // Replace with your 2nd image path
+        'assets/img/25_amw_running.jpg',      // Replace with your 3rd image path
+        'assets/img/25_amw_loyola.jpeg',      // Replace with your 3rd image path
+        'assets/img/25_amw_carb.jpg',      // Replace with your 3rd image path
+        'assets/img/25_amw_free.jpg',      // Replace with your 3rd image path
+        'assets/img/25_amw_CoN.jpg'      // Replace with your 3rd image path
+    ];
+    
+    const imageElement = document.getElementById('about-rotating-image');
+    let currentImageIndex = 0;
+    
+    // Function to change the image with a fade effect
+    function changeImage() {
+        // Fade out current image
+        imageElement.classList.add('fade-out');
+        
+        // After the fade-out completes, change the source and fade back in
+        setTimeout(() => {
+            // Update to next image
+            currentImageIndex = (currentImageIndex + 1) % aboutImages.length;
+            imageElement.src = aboutImages[currentImageIndex];
+            
+            // Fade in the new image
+            imageElement.classList.remove('fade-out');
+        }, 1000); // This should match the transition time in CSS
+    }
+    
+    // Rotate images every 5 seconds (adjust timing as needed)
+    setInterval(changeImage, 5000);
+});
 
   /**
    * Scrolls to an element with header offset
