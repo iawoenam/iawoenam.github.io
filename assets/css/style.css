@@ -14,13 +14,14 @@ body {
 }
 
 a {
-  color: #775DA5;
+  color: #9B7E46;
   text-decoration: none;
 }
 
 a:hover {
-  color: #6012E8;
-  text-decoration: none;
+  color: #F4B266;
+  text-decoration: underline;
+  text-decoration-style: wavy;
 }
 
 h1,
@@ -42,7 +43,7 @@ h6 {
   right: 15px;
   bottom: 15px;
   z-index: 996;
-  background: #775DA5;
+  background: #9B7E46;
   width: 40px;
   height: 40px;
   border-radius: 50px;
@@ -56,7 +57,7 @@ h6 {
 }
 
 .back-to-top:hover {
-  background: #6012E8;
+  background: #F4B266;
   color: #fff;
 }
 
@@ -221,7 +222,7 @@ h6 {
 .nav-menu .active:focus,
 .nav-menu li:hover>a {
   color: #fff;
-  background: #775DA5;
+  background: #9B7E46;
 }
 
 .nav-menu a:hover span,
@@ -321,7 +322,7 @@ h6 {
 }
 
 #hero p span {
-  color: #775DA5;
+  color: #9B7E46;
   letter-spacing: 1px;
 }
 
@@ -339,7 +340,7 @@ h6 {
 }
 
 #hero .social-links a:hover {
-  color: #775DA5;
+  color: #9B7E46;
 }
 
 @media (max-width: 992px) {
@@ -400,7 +401,7 @@ section {
   display: block;
   width: 40px;
   height: 3px;
-  background: #775DA5;
+  background: #9B7E46;
   bottom: 0;
   left: calc(50% - 20px);
 }
@@ -436,7 +437,7 @@ section {
 .about .content ul i {
   font-size: 16px;
   margin-right: 5px;
-  color: #775DA5;
+  color: #9B7E46;
   line-height: 0;
 }
 
@@ -527,7 +528,7 @@ img.rounded-corners {
   width: 1px;
   height: 10px;
   transition: 0.9s;
-  background-color: #775DA5;
+  background-color: #9B7E46;
 }
 
 /*--------------------------------------------------------------
@@ -544,7 +545,7 @@ img.rounded-corners {
 .resume .resume-item {
   padding: 0 0 20px 20px;
   margin-top: -2px;
-  border-left: 2px solid #775DA5;
+  border-left: 2px solid #9B7E46;
   position: relative;
 }
 
@@ -554,7 +555,7 @@ img.rounded-corners {
   font-weight: 600;
   text-transform: uppercase;
   font-family: "Poppins", sans-serif;
-  color: #775DA5;
+  color: #9B7E46;
   margin-bottom: 10px;
 }
 
@@ -588,7 +589,7 @@ img.rounded-corners {
   left: -9px;
   top: 0;
   background: #fff;
-  border: 2px solid #775DA5;
+  border: 2px solid #9B7E46;
 }
 
 /*--------------------------------------------------------------
@@ -623,7 +624,7 @@ img.rounded-corners {
 
 .portfolio #portfolio-flters li:hover,
 .portfolio #portfolio-flters li.filter-active {
-  color: #775DA5;
+  color: #9B7E46;
 }
 
 .portfolio #portfolio-flters li:last-child {
@@ -1044,7 +1045,7 @@ img.rounded-corners {
 
 .contact .info i {
   font-size: 20px;
-  color: #775DA5;
+  color: #9B7E46;
   float: left;
   width: 44px;
   height: 44px;
@@ -1079,7 +1080,7 @@ img.rounded-corners {
 .contact .info .email:hover i,
 .contact .info .address:hover i,
 .contact .info .phone:hover i {
-  background: #775DA5;
+  background: #9B7E46;
   color: #fff;
 }
 
@@ -1150,7 +1151,7 @@ img.rounded-corners {
 }
 
 .contact .php-contact-form button[type=submit] {
-  background: #775DA5;
+  background: #9B7E46;
   border: 0;
   padding: 10px 35px;
   color: #fff;
@@ -1159,7 +1160,7 @@ img.rounded-corners {
 }
 
 .contact .php-contact-form button[type=submit]:hover {
-  background: #6012E8;
+  background: #F4B266;
 }
 
 @-webkit-keyframes animate-loading {
@@ -1218,7 +1219,7 @@ img.rounded-corners {
 #footer .social-links a {
   font-size: 20px;
   display: inline-block;
-  background: #775DA5;
+  background: #9B7E46;
   color: #fff;
   line-height: 1;
   padding: 8px 0;
@@ -1231,7 +1232,7 @@ img.rounded-corners {
 }
 
 #footer .social-links a:hover {
-  background: #6012E8;
+  background: #F4B266;
   color: #fff;
   text-decoration: none;
 }
