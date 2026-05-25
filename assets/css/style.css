@@ -454,6 +454,47 @@ img.rounded-corners {
 }
 
 /*--------------------------------------------------------------
+# Favorites - 5 Columns
+--------------------------------------------------------------*/
+.col-custom-5 {
+  width: 20%;
+  float: left;
+  position: relative;
+  min-height: 1px;
+  padding-right: 15px;
+  padding-left: 15px;
+}
+
+/* Responsiveness: Stack columns on mobile devices */
+@media (max-width: 992px) {
+  .col-custom-5 {
+    width: 100%;
+    margin-bottom: 15px;
+  }
+}
+
+/* Styling the H3 Toggle */
+.year-dropdown summary h3 {
+  display: inline-block;
+  font-size: 26px; /* Matches About section H3 [4] */
+  font-weight: 700;
+  color: #728394; /* Grey-blue from source [4] */
+  margin: 0;
+  cursor: pointer;
+}
+
+.year-dropdown summary {
+  list-style: none; /* Removes default arrow if desired */
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 20px;
+}
+
+.year-dropdown summary:hover h3 {
+  color: #775DA5; /* Matches your main theme purple [1, 5] */
+}
+
+/*--------------------------------------------------------------
 # Facts
 --------------------------------------------------------------*/
 .facts .count-box {
@@ -813,6 +854,7 @@ img.rounded-corners {
 .portfolio-details .portfolio-description p {
   padding: 0;
 }
+
 
 /*--------------------------------------------------------------
 # 
